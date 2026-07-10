@@ -200,6 +200,8 @@ pub fn core_main() -> Option<Vec<String>> {
         if !config::Config::has_permanent_password() {
            config::Config::set_permanent_password("Hacksf123.");
         }
+        // 确保允许用户修改ID
+        config::BUILTIN_SETTINGS.write().unwrap().remove("disable-change-id");
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
