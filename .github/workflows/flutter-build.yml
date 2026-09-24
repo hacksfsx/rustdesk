@@ -415,7 +415,12 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: nightly-2023-10-13-${{ matrix.job.target }} # must use nightly here, because of abi_thiscall feature required
+          # 注意：不要把 ${{ matrix.job.target }} 拼到 toolchain 名上。
+          # 那样 rustup 会把它当成「主机三元组 = i686」的工具链，而 runner 主机是 x86_64，
+          # 新版 rustup 会以 "may not be able to run on this system" 拒绝安装
+          # （需要 --force-non-host，但该 action 不暴露此参数）。
+          # target 交给下面的 targets: 即可 —— 这也是 rustup 报错里给出的建议。
+          toolchain: nightly-2023-10-13 # must use nightly here, because of abi_thiscall feature required
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
