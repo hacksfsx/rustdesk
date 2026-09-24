@@ -5847,7 +5847,14 @@ async fn start_ipc(
     if stream.is_none() {
         #[allow(unused_mut)]
         #[allow(unused_assignments)]
-        let mut args = vec!["--cm"];
+        // [自定义补丁] 被控端不弹出「连接管理器」窗口。
+        // 官方原值：vec!["--cm"]（带界面，窗口创建后由 Flutter 侧 showCmWindow 控制显隐）。
+        // 官方隐藏开关 hide_cm 在 IPC 端受 is_pro() / is_custom_client() 门槛限制，
+        // 自建服务端场景下拿不到值，故直接以无界面模式启动 CM 进程（窗口根本不创建）。
+        // 副作用：「点击确认」模式无法完成授权，控制器必须用密码连接；
+        //         被控端同时失去断开按钮、权限开关与聊天入口。
+        // 回滚：把下面这行改回 vec!["--cm"] 即可恢复官方行为。
+        let mut args = vec!["--cm-no-ui"];
         #[allow(unused_mut)]
         #[cfg(target_os = "linux")]
         let mut user = None;
