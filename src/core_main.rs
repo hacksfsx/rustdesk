@@ -38,6 +38,18 @@ pub fn core_main() -> Option<Vec<String>> {
         // return None to terminate the process
         return None;
     }
+    // [自定义补丁] 被控端不显示通知区域（托盘）图标，实现无感远控。
+    // hide-tray 是 builtin 选项，官方唯一注入途径是「官方私钥签名的 custom.txt」，
+    // 自建场景拿不到私钥，故启动时直接写入 BUILTIN_SETTINGS。
+    // ⚠️ 必须放在参数分发之前、且无条件执行：`--tray` 是独立进程（args 非空），
+    //    若写进下方 `if args.is_empty()` 块里，在 --tray 进程中不会执行 → 图标照样出现。
+    // 生效点：src/tray.rs:12 提前 return → make_tray() 不执行 → 图标根本不创建。
+    // 副作用：本地无法再从托盘打开主窗口，只能直接运行 exe（不带参数仍会显示主窗口）。
+    // 回滚：删除下面这一段即可。
+    config::BUILTIN_SETTINGS
+        .write()
+        .unwrap()
+        .insert(config::keys::OPTION_HIDE_TRAY.to_owned(), "Y".to_owned());
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
