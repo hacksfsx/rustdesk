@@ -6,6 +6,7 @@ use hbb_common::{
     bytes::Bytes,
     config::{self, Config, LocalConfig, PeerConfig, CONNECT_TIMEOUT, RENDEZVOUS_PORT},
     directories_next,
+    futures::future::join_all,
     log,
     rendezvous_proto::*,
     tokio,
@@ -1524,21 +1525,39 @@ pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
         return UNKNOWN_ERROR;
     }
 
-    // [custom] Skip rendezvous-server registration: write the id locally and return
-    // success, so a custom id can be set at any time without being checked remotely.
-    log::info!("Change id from \"{old_id}\" to \"{id}\", skipping server registration");
-
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::ipc::set_config_async("id", id.to_owned()).await.ok();
+    let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        Config::set_key_confirmed(false);
-        Config::set_id(&id);
+    let rendezvous_servers = Config::get_rendezvous_servers();
+
+    let mut futs = Vec::new();
+    let err: Arc<Mutex<&str>> = Default::default();
+    for rendezvous_server in rendezvous_servers {
+        let err = err.clone();
+        let id = id.to_owned();
+        let uuid = uuid.clone();
+        let old_id = old_id.clone();
+        futs.push(tokio::spawn(async move {
+            let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
+            if !tmp.is_empty() {
+                *err.lock().unwrap() = tmp;
+            }
+        }));
     }
-    ""
+    join_all(futs).await;
+    let err = *err.lock().unwrap();
+    if err.is_empty() {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        crate::ipc::set_config_async("id", id.to_owned()).await.ok();
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            Config::set_key_confirmed(false);
+            Config::set_id(&id);
+        }
+    }
+    err
 }
 
-#[allow(dead_code)]
 async fn check_id(
     rendezvous_server: String,
     old_id: String,
@@ -1576,7 +1595,12 @@ async fn check_id(
                                 return "Too frequent";
                             }
                             Ok(register_pk_response::Result::NOT_SUPPORT) => {
-                                return "server_not_support";
+                                // [custom] Open-source hbbs answers NOT_SUPPORT to every
+                                // RegisterPk on its TCP path (only its UDP path handles the
+                                // message). That means "this server does not manage ids",
+                                // not "this id is bad", so apply the id locally instead of
+                                // failing the whole change.
+                                ok = true;
                             }
                             Ok(register_pk_response::Result::SERVER_ERROR) => {
                                 return "Server error";

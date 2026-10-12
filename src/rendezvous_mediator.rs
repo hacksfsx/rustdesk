@@ -581,6 +581,17 @@ impl RendezvousMediator {
                     _ => {}
                 }
             }
+            Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
+                let v0 = Config::get_rendezvous_servers();
+                Config::set_option(
+                    "rendezvous-servers".to_owned(),
+                    cu.rendezvous_servers.join(","),
+                );
+                Config::set_serial(cu.serial);
+                if v0 != Config::get_rendezvous_servers() {
+                    Self::restart();
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1279,7 +1290,22 @@ impl RendezvousMediator {
             if solving.is_empty() || *solving == self.host {
                 log::info!("UUID_MISMATCH received from {}", self.host);
                 Config::set_key_confirmed(false);
-                Config::update_id();
+                // [custom] Keep a user-chosen custom id. Upstream replaces the local id with a
+                // random 10-digit one here, which is exactly what made a custom id "jump away"
+                // a few seconds after being set: the server answers UUID_MISMATCH because it
+                // does not know the new id yet, and the client then throws the custom id away.
+                // Auto-generated ids are plain digits and fail is_valid_custom_id(), so only
+                // those are regenerated.
+                let current = Config::get_id();
+                if hbb_common::is_valid_custom_id(&current) {
+                    log::info!(
+                        "keeping custom id {:?} on UUID_MISMATCH from {}",
+                        current,
+                        self.host
+                    );
+                } else {
+                    Config::update_id();
+                }
                 *solving = self.host.clone();
             } else {
                 return Ok(());
