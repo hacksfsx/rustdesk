@@ -737,6 +737,13 @@ async fn test_nat_type_() -> ResultType<bool> {
                 } else {
                     port2 = tnr.port;
                 }
+                if let Some(cu) = tnr.cu.as_ref() {
+                    Config::set_option(
+                        "rendezvous-servers".to_owned(),
+                        cu.rendezvous_servers.join(","),
+                    );
+                    Config::set_serial(cu.serial);
+                }
             }
         } else {
             break;
@@ -1152,7 +1159,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "http://111.231.33.159:21114".to_owned()
+    "http://47.111.3.104:21114".to_owned()
 }
 
 #[inline]
