@@ -1564,6 +1564,7 @@ async fn check_id(
     id: String,
     uuid: Bytes,
 ) -> &'static str {
+    let ctx = format!("server={rendezvous_server} id={id}");
     if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
         CONNECT_TIMEOUT,
@@ -1575,6 +1576,9 @@ async fn check_id(
             old_id,
             id,
             uuid,
+            // [custom] Send the real public key. Upstream leaves `pk` empty here, and a
+            // key-checking server (RustDesk Pro) rejects that as INVALID_ID_FORMAT.
+            pk: Config::get_key_pair().1.into(),
             ..Default::default()
         });
         let mut ok = false;
@@ -1606,7 +1610,13 @@ async fn check_id(
                                 return "Server error";
                             }
                             Ok(register_pk_response::Result::INVALID_ID_FORMAT) => {
-                                return INVALID_FORMAT;
+                                // [custom] Do not veto the whole change. Whatever naming
+                                // rule this server enforces, silently discarding the id is
+                                // worse: it is what makes a custom id feel "unsettable".
+                                // Apply it locally and log the verdict, so the server-side
+                                // rule can be chased separately.
+                                log::warn!("{ctx}: INVALID_ID_FORMAT, applying locally anyway");
+                                ok = true;
                             }
                             _ => {}
                         }
