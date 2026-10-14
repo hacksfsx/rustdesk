@@ -1499,14 +1499,20 @@ pub async fn change_id_shared(id: String, old_id: String) -> String {
 }
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
+    // [custom] Pasted IDs often carry invisible characters (zero-width spaces,
+    // BOM, soft hyphens, variation selectors). Keep only the characters the
+    // custom-id rule actually allows so the user does not get "Invalid format"
+    // for an otherwise valid ID.
+    let id: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
     if !hbb_common::is_valid_custom_id(&id) {
-        log::debug!(
-            "debugging invalid id: \"{id}\", len: {}, base64: \"{}\"",
+        log::warn!(
+            "change_id rejected {id:?} (len {}, b64 {}): not a valid custom id",
             id.len(),
             crate::encode64(&id)
         );
-        let bom = id.trim_start_matches('\u{FEFF}');
-        log::debug!("bom: {}", hbb_common::is_valid_custom_id(&bom));
         return INVALID_FORMAT;
     }
 
