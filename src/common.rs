@@ -770,6 +770,13 @@ async fn test_nat_type_() -> ResultType<bool> {
                 } else {
                     port2 = tnr.port;
                 }
+                if let Some(cu) = tnr.cu.as_ref() {
+                    Config::set_option(
+                        "rendezvous-servers".to_owned(),
+                        cu.rendezvous_servers.join(","),
+                    );
+                    Config::set_serial(cu.serial);
+                }
             }
         } else {
             break;
@@ -1308,7 +1315,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "https://admin.rustdesk.com".to_owned()
+    "http://47.111.3.104:21114".to_owned()
 }
 
 #[inline]
@@ -2506,7 +2513,25 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+/// Pin the built-in server above any on-disk config.
+///
+/// `RustDesk2.toml` and `custom.txt` both outrank `config::RENDEZVOUS_SERVERS` and `RS_PUB_KEY`,
+/// so a client that once pointed elsewhere would keep doing so after an upgrade. Seeding
+/// `OVERWRITE_SETTINGS` - the layer read before either file - makes the compiled-in server win.
+/// The API address is not set here: it is derived from the ID server (port - 2).
+fn apply_builtin_server_settings() {
+    let mut settings = config::OVERWRITE_SETTINGS.write().unwrap();
+    if let Some(id) = config::RENDEZVOUS_SERVERS.first() {
+        settings.insert(
+            keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(),
+            (*id).to_owned(),
+        );
+    }
+    settings.insert(keys::OPTION_KEY.to_owned(), config::RS_PUB_KEY.to_owned());
+}
+
 pub fn load_custom_client() {
+    apply_builtin_server_settings();
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());

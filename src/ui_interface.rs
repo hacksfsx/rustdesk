@@ -1550,14 +1550,20 @@ pub async fn change_id_shared(id: String, old_id: String) -> String {
 }
 
 pub async fn change_id_shared_(id: String, old_id: String) -> &'static str {
+    // [custom] Pasted IDs often carry invisible characters (zero-width spaces,
+    // BOM, soft hyphens, variation selectors). Keep only the characters the
+    // custom-id rule actually allows so the user does not get "Invalid format"
+    // for an otherwise valid ID.
+    let id: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
     if !hbb_common::is_valid_custom_id(&id) {
-        log::debug!(
-            "debugging invalid id: \"{id}\", len: {}, base64: \"{}\"",
+        log::warn!(
+            "change_id rejected {id:?} (len {}, b64 {}): not a valid custom id",
             id.len(),
             crate::encode64(&id)
         );
-        let bom = id.trim_start_matches('\u{FEFF}');
-        log::debug!("bom: {}", hbb_common::is_valid_custom_id(&bom));
         return INVALID_FORMAT;
     }
 
@@ -1615,6 +1621,7 @@ async fn check_id(
     id: String,
     uuid: Bytes,
 ) -> &'static str {
+    let ctx = format!("server={rendezvous_server} id={id}");
     if let Ok(mut socket) = hbb_common::socket_client::connect_tcp(
         crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
         CONNECT_TIMEOUT,
@@ -1626,6 +1633,9 @@ async fn check_id(
             old_id,
             id,
             uuid,
+            // [custom] Send the real public key. Upstream leaves `pk` empty here, and a
+            // key-checking server (RustDesk Pro) rejects that as INVALID_ID_FORMAT.
+            pk: Config::get_key_pair().1.into(),
             ..Default::default()
         });
         let mut ok = false;
@@ -1646,13 +1656,24 @@ async fn check_id(
                                 return "Too frequent";
                             }
                             Ok(register_pk_response::Result::NOT_SUPPORT) => {
-                                return "server_not_support";
+                                // [custom] Open-source hbbs answers NOT_SUPPORT to every
+                                // RegisterPk on its TCP path (only its UDP path handles the
+                                // message). That means "this server does not manage ids",
+                                // not "this id is bad", so apply the id locally instead of
+                                // failing the whole change.
+                                ok = true;
                             }
                             Ok(register_pk_response::Result::SERVER_ERROR) => {
                                 return "Server error";
                             }
                             Ok(register_pk_response::Result::INVALID_ID_FORMAT) => {
-                                return INVALID_FORMAT;
+                                // [custom] Do not veto the whole change. Whatever naming
+                                // rule this server enforces, silently discarding the id is
+                                // worse: it is what makes a custom id feel "unsettable".
+                                // Apply it locally and log the verdict, so the server-side
+                                // rule can be chased separately.
+                                log::warn!("{ctx}: INVALID_ID_FORMAT, applying locally anyway");
+                                ok = true;
                             }
                             _ => {}
                         }

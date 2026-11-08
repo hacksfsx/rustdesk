@@ -77,7 +77,8 @@ void changeIdDialog() {
   final RxString rxId = controller.text.trim().obs;
 
   final rules = [
-    RegexValidationRule('starts with a letter', RegExp(r'^[a-zA-Z]')),
+    // [custom] Upstream also requires the first character to be a letter, which
+    // forces numeric ids to be padded with a letter. Digits are accepted here.
     LengthRangeValidationRule(6, 16),
     RegexValidationRule('allowed characters', RegExp(r'^[\w-]*$'))
   ];
@@ -85,7 +86,7 @@ void changeIdDialog() {
   gFFI.dialogManager.show((setState, close, context) {
     submit() async {
       debugPrint("onSubmit");
-      newId = controller.text.trim();
+      newId = controller.text.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
 
       final Iterable violations = rules.where((r) => !r.validate(newId));
       if (violations.isNotEmpty) {
