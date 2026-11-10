@@ -3079,8 +3079,18 @@ String getWindowName({WindowType? overrideType}) {
   return name;
 }
 
+/// Title string handed to the OS window manager (`windowManager.setTitle` /
+/// `DesktopMultiWindowController.setTitle`).
+///
+/// NOTE: this is the text the desktop shell renders verbatim - Windows paints
+/// it as the taskbar button label and inside the thumbnail/tooltip header,
+/// Linux window lists and macOS title bars do the same. It therefore must not
+/// contain a peer id: "<peer_id> - RustDesk" leaked the id of every session /
+/// connection-manager window to the taskbar. In-app tab labels are built from
+/// `DesktopTab.tablabelGetter` / `getDesktopTabLabel` separately, so dropping
+/// the id here does not change the tabs.
 String getWindowNameWithId(String id, {WindowType? overrideType}) {
-  return "${DesktopTab.tablabelGetter(id).value} - ${getWindowName(overrideType: overrideType)}";
+  return getWindowName(overrideType: overrideType);
 }
 
 Future<void> updateSystemWindowTheme() async {
