@@ -183,16 +183,27 @@ bool Win32Window::CreateAndShow(const std::wstring& title,
   }
 
   if (!showOnTaskBar) {
-    // hide from taskbar
-    HRESULT hr;
-    ITaskbarList* pTaskbarList;
-    hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER,IID_ITaskbarList,(void**)&pTaskbarList);
-    if (FAILED(hr)) {
-        return false;
+    // Keep the window off the taskbar AND out of the Alt+Tab switcher by
+    // flagging it as a tool window. ITaskbarList::DeleteTab on its own is not
+    // sticky: the shell puts the button back whenever the window is re-shown
+    // or its title changes, which is exactly what happens when a connection
+    // arrives and the title gets updated.
+    LONG_PTR ex_style = GetWindowLongPtr(window, GWL_EXSTYLE);
+    SetWindowLongPtr(window, GWL_EXSTYLE,
+                     (ex_style | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW);
+
+    // Best effort, also drops the button immediately instead of on next
+    // shell enumeration. Failure here must not abort window creation.
+    ITaskbarList* pTaskbarList = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr,
+                                  CLSCTX_INPROC_SERVER, IID_ITaskbarList,
+                                  (void**)&pTaskbarList);
+    if (SUCCEEDED(hr) && pTaskbarList != nullptr) {
+      if (SUCCEEDED(pTaskbarList->HrInit())) {
+        pTaskbarList->DeleteTab(window);
+      }
+      pTaskbarList->Release();
     }
-    hr = pTaskbarList->HrInit();
-    hr = pTaskbarList->DeleteTab(window);
-    hr = pTaskbarList->Release();
   }
 
   return OnCreate();

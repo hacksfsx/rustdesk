@@ -179,7 +179,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   } else {
     window_title = app_name;
   }
-  if (!window.CreateAndShow(window_title, origin, size, !is_cm_page)) {
+  // showOnTaskBar is always false: a taskbar button (and its thumbnail /
+  // tooltip header) is labelled with the window title, which would advertise
+  // the remote-control client running on this machine. The main window used to
+  // pass `true` here, so it kept a "RustDesk" button on the taskbar.
+  if (!window.CreateAndShow(window_title, origin, size, false)) {
       return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

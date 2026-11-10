@@ -412,7 +412,14 @@ WindowOptions getHiddenTitleBarWindowOptions(
     size: size,
     center: center,
     backgroundColor: (isMacOS && isMainWindow) ? null : Colors.transparent,
-    skipTaskbar: false,
+    // Keep the window out of the Windows taskbar. Otherwise every window of
+    // this process gets a taskbar button (and thumbnail/tooltip) labelled with
+    // its window title, which reveals that a remote-control client is running
+    // on this machine. window_manager implements this with WS_EX_TOOLWINDOW,
+    // so the window also drops out of the Alt+Tab list; it stays visible and
+    // focusable, and session windows (created by desktop_multi_window) are not
+    // affected by this flag.
+    skipTaskbar: isWindows,
     titleBarStyle: defaultTitleBarStyle,
     alwaysOnTop: alwaysOnTop,
   );
