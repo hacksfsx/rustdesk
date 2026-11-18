@@ -1291,6 +1291,10 @@ pub fn get_api_server(api: String, custom: String) -> String {
     res
 }
 
+/// Built-in API server. Single source of truth: the settings seed in
+/// `apply_builtin_server_settings()` and the fallback below must stay identical.
+const BUILTIN_API_SERVER: &str = "http://47.111.3.104:21114";
+
 fn get_api_server_(api: String, custom: String) -> String {
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
@@ -1315,7 +1319,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "http://47.111.3.104:21114".to_owned()
+    BUILTIN_API_SERVER.to_owned()
 }
 
 #[inline]
@@ -2518,7 +2522,8 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 /// `RustDesk2.toml` and `custom.txt` both outrank `config::RENDEZVOUS_SERVERS` and `RS_PUB_KEY`,
 /// so a client that once pointed elsewhere would keep doing so after an upgrade. Seeding
 /// `OVERWRITE_SETTINGS` - the layer read before either file - makes the compiled-in server win.
-/// The API address is not set here: it is derived from the ID server (port - 2).
+/// All four fields of the ID/Relay Server dialog are seeded explicitly (ID / relay / API / key),
+/// so the defaults are complete and `is_option_fixed()` also blocks the UI from changing them.
 fn apply_builtin_server_settings() {
     let mut settings = config::OVERWRITE_SETTINGS.write().unwrap();
     if let Some(id) = config::RENDEZVOUS_SERVERS.first() {
@@ -2527,6 +2532,13 @@ fn apply_builtin_server_settings() {
             (*id).to_owned(),
         );
     }
+    if let Some(relay) = config::RELAY_SERVERS.first() {
+        settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), (*relay).to_owned());
+    }
+    settings.insert(
+        keys::OPTION_API_SERVER.to_owned(),
+        BUILTIN_API_SERVER.to_owned(),
+    );
     settings.insert(keys::OPTION_KEY.to_owned(), config::RS_PUB_KEY.to_owned());
 }
 
