@@ -1391,16 +1391,18 @@ impl RendezvousMediator {
     }
 
     fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
-        // [custom] Pin the relay to our own server. When `config::RELAY_SERVERS` is non-empty
-        // it wins over both the local `relay-server` option and the relay advertised by the
-        // rendezvous server, so the relay can never silently drift to a third-party host.
+        // [custom] A relay explicitly set by the user in Settings -> ID/Relay Server
+        // wins. Otherwise the compiled-in `RELAY_SERVERS` is the default, so the client
+        // still points at our own relay out of the box while the field stays editable
+        // and effective (an unconditional pin would silently ignore user input).
+        let relay_server = Config::get_option("relay-server");
+        if !relay_server.is_empty() {
+            return relay_server;
+        }
         if let Some(relay) = config::RELAY_SERVERS.first() {
             return crate::check_port(relay, config::RELAY_PORT);
         }
-        let mut relay_server = Config::get_option("relay-server");
-        if relay_server.is_empty() {
-            relay_server = provided_by_rendezvous_server;
-        }
+        let mut relay_server = provided_by_rendezvous_server;
         if relay_server.is_empty() {
             relay_server = crate::increase_port(&self.host, 1);
         }

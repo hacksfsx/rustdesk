@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/api_server_warning.dart';
 import 'package:flutter_hbb/common/widgets/setting_widgets.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:get/get.dart';
@@ -53,32 +53,26 @@ void setTemporaryPasswordLengthDialog(
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
-/// [custom] Placeholder shown instead of the compiled-in ID / relay / API / key.
-/// The real values live in `OVERWRITE_SETTINGS` and must never reach the UI.
-const String kMaskedServerInfo = '••••••••';
-
 void showServerSettings(OverlayDialogManager dialogManager,
-    void Function(VoidCallback) setState) {
-  // [custom] Keep the settings page, the network card and this dialog fully usable,
-  // but open it with masked, read-only fields so the built-in server config is never
-  // displayed, exported or written back. Scan/import callers still use
-  // `showServerSettingsWithValue()` directly (readOnly defaults to false).
+    void Function(VoidCallback) setState) async {
+  // [custom] Read the local options instead of seeding them into OVERWRITE_SETTINGS.
+  // On a fresh install the four fields are empty, while the compiled-in constants
+  // (RENDEZVOUS_SERVERS / RELAY_SERVERS / RS_PUB_KEY / BUILTIN_API_SERVER) stay the
+  // effective defaults. Anything the user saved is shown here and can be edited.
+  Map<String, dynamic> options = {};
+  try {
+    options = jsonDecode(await bind.mainGetOptions());
+  } catch (e) {
+    print("Invalid server config: $e");
+  }
   showServerSettingsWithValue(
-      ServerConfig(
-          idServer: kMaskedServerInfo,
-          relayServer: kMaskedServerInfo,
-          apiServer: kMaskedServerInfo,
-          key: kMaskedServerInfo),
-      dialogManager,
-      setState,
-      readOnly: true);
+      ServerConfig.fromOptions(options), dialogManager, setState);
 }
 
 void showServerSettingsWithValue(
     ServerConfig serverConfig,
     OverlayDialogManager dialogManager,
-    void Function(VoidCallback)? upSetState,
-    {bool readOnly = false}) async {
+    void Function(VoidCallback)? upSetState) async {
   const labelWidth = 120.0;
   const labelSpacing = 8.0;
   var isInProgress = false;
@@ -137,8 +131,7 @@ void showServerSettingsWithValue(
                     EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 showLabelText: false,
                 validator: validator,
-                autofocus: autofocus && !readOnly,
-                readOnly: readOnly,
+                autofocus: autofocus,
               ).workaroundFreezeLinuxMint(),
             ),
           ],
@@ -150,8 +143,6 @@ void showServerSettingsWithValue(
         controller: controller,
         errorMsg: errorMsg,
         validator: validator,
-        autofocus: autofocus && !readOnly,
-        readOnly: readOnly,
       ).workaroundFreezeLinuxMint();
     }
 
@@ -159,9 +150,7 @@ void showServerSettingsWithValue(
       title: Row(
         children: [
           Expanded(child: Text(translate('ID/Relay Server'))),
-          // [custom] Import/export would expose (or overwrite) the built-in config.
-          if (!readOnly)
-            ...ServerConfigImportExportWidgets(controllers, errMsgs),
+          ...ServerConfigImportExportWidgets(controllers, errMsgs),
         ],
       ),
       content: ConstrainedBox(
@@ -192,21 +181,9 @@ void showServerSettingsWithValue(
                       return null;
                     },
                   ),
-                  // [custom] No HTTP warning in read-only mode: it is derived from
-                  // the real built-in API address and would leak that information.
-                  if (!readOnly)
-                    Padding(
-                      padding: EdgeInsetsDirectional.only(
-                        start:
-                            isDesktop || isWeb ? labelWidth + labelSpacing : 0,
-                      ),
-                      child: ApiServerWarning(
-                        controller: apiCtrl,
-                        idController: idCtrl,
-                        message: translate('api_server_connection_tip'),
-                        emptyMessage: translate('api_server_empty_tip'),
-                      ),
-                    ),
+                  // [custom] The upstream HTTP warning widget is intentionally omitted:
+                  // with empty fields it resolves the built-in HTTP API and would show
+                  // a confusing "enable HTTPS" prompt that does not apply here.
                   SizedBox(height: 8),
                   buildField('Key', keyCtrl, ''),
                   if (isInProgress)
@@ -225,11 +202,6 @@ void showServerSettingsWithValue(
         dialogButton(
           'OK',
           onPressed: () async {
-            // [custom] Masked built-in values must never be written back.
-            if (readOnly) {
-              close();
-              return;
-            }
             if (await submit()) {
               close();
               showToast(translate('Successful'));
@@ -251,12 +223,10 @@ TextFormField serverSettingsTextFormField({
   String? Function(String?)? validator,
   bool autofocus = false,
   bool showLabelText = true,
-  bool readOnly = false,
   EdgeInsetsGeometry? contentPadding,
 }) {
   return TextFormField(
     controller: controller,
-    readOnly: readOnly,
     decoration: InputDecoration(
       labelText: showLabelText ? label : null,
       errorText: errorMsg.isEmpty ? null : errorMsg,
