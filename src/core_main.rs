@@ -52,16 +52,13 @@ pub fn core_main() -> Option<CoreMainAction> {
         // return None to terminate the process
         return None;
     }
-    // [custom] Built-in flags that must not be changed from disk or UI: hide the tray icon
-    // and the whole network card (ID/Relay/API/Key, proxy, websocket), so the compiled-in
-    // server config is never exposed or editable in settings. Set unconditionally, before
-    // argument dispatch, so the dedicated `--tray` process takes this path as well.
+    // [custom] Force-hide the tray icon. Set unconditionally, before argument dispatch,
+    // so the dedicated `--tray` process takes this path as well.
+    // Do NOT hide the network settings here: the settings page, its network card and the
+    // ID/Relay Server dialog must stay reachable. Only the built-in server values are
+    // masked, in `flutter/lib/mobile/widgets/dialog.dart`.
     if let Ok(mut settings) = config::BUILTIN_SETTINGS.write() {
         settings.insert(keys::OPTION_HIDE_TRAY.to_owned(), "Y".to_owned());
-        settings.insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_owned(), "Y".to_owned());
-        settings.insert(keys::OPTION_HIDE_PROXY_SETTINGS.to_owned(), "Y".to_owned());
-        settings.insert(keys::OPTION_HIDE_NETWORK_SETTINGS.to_owned(), "Y".to_owned());
-        settings.insert(keys::OPTION_HIDE_WEBSOCKET_SETTINGS.to_owned(), "Y".to_owned());
     }
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
